@@ -10,25 +10,28 @@ services:
       update_config:
         parallelism: 1
         delay: 10s
+        order: start-first
       restart_policy:
         condition: on-failure
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.miweb.entrypoints=http"
 
-        # 🌐 DOMINIO (cámbialo por el tuyo)
+        # HTTP
+        - "traefik.http.routers.miweb.entrypoints=http"
         - "traefik.http.routers.miweb.rule=Host(`miweb.byronrm.com`)"
 
-        - "traefik.http.middlewares.miweb-https-redirect.redirectscheme.scheme=https"
-        - "traefik.http.routers.miweb.middlewares=miweb-https-redirect"
+        # Redirect HTTPS
+        - "traefik.http.middlewares.miweb-https.redirectscheme.scheme=https"
+        - "traefik.http.routers.miweb.middlewares=miweb-https"
 
+        # HTTPS
         - "traefik.http.routers.miweb-secure.entrypoints=https"
         - "traefik.http.routers.miweb-secure.rule=Host(`miweb.byronrm.com`)"
         - "traefik.http.routers.miweb-secure.tls=true"
-        - "traefik.http.routers.miweb-secure.tls.certresolver=http"
+        - "traefik.http.routers.miweb-secure.tls.certresolver=le"
         - "traefik.http.routers.miweb-secure.service=miweb"
 
-        # 🔌 Puerto interno de nginx
+        # Puerto nginx
         - "traefik.http.services.miweb.loadbalancer.server.port=80"
 
         - "traefik.docker.network=traefik-public"

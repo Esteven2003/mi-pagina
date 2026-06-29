@@ -1,39 +1,85 @@
-name: Deploy to Contabo VPS
+name: mi web contabo
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
-      - name: Checkout code
+      - name: Descargar codigo
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Login GHCR
+        uses: docker/login-action@v3
         with:
-          ssh-private-key: ${{ secrets.VPS_PRIVATE_KEY }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Deploy to server
+      - name: Formatear nombre imagen
+        id: string
+        run: echo "IMAGE_ID=$(echo ${{ env.IMAGE_NAME }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build y Push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.string.outputs.IMAGE_ID }}:latest
+
+      - name: Variables VPS
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd /var/www/html
+          echo "${{ secrets.VPS_HOST }}"
+          echo "${{ secrets.VPS_USER }}"
+          echo "${{ secrets.VPS_SSH_PORT }}"
 
-            # si existe repo viejo
-            if [ -d "mi-web" ]; then
-              cd mi-web
-              git pull
-            else
-              git clone https://github.com/${{ github.repository }}.git mi-web
-              cd mi-web
-            fi
+      - name: SSH VPS diagnostico
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: |
+            echo "conexion OK"
+            hostname
+            whoami
+            uptime
 
-            docker build -t mi-web .
-            docker stop mi-web || true
-            docker rm mi-web || true
-            docker run -d -p 80:80 --name mi-web mi-web
-          EOF
+      - name: Subir stack.yml y Makefile
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          source: "stack.yml,Makefile,Dockerfile,nginx.conf"
+          target: "/home/${{ secrets.VPS_USER }}/mi-web"
+
+      - name: Deploy Swarm Stack
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: |
+            cd /home/${{ secrets.VPS_USER }}/mi-web
+
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker pull ${{ env.REGISTRY }}/${{ steps.string.outputs.IMAGE_ID }}:latest
+
+            docker stack deploy -c stack.yml --with-registry-auth miweb_stack
+
+            docker service ls
