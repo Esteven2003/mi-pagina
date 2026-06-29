@@ -1,0 +1,39 @@
+name: Deploy to Contabo VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_PRIVATE_KEY }}
+
+      - name: Deploy to server
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd /var/www/html
+
+            # si existe repo viejo
+            if [ -d "mi-web" ]; then
+              cd mi-web
+              git pull
+            else
+              git clone https://github.com/${{ github.repository }}.git mi-web
+              cd mi-web
+            fi
+
+            docker build -t mi-web .
+            docker stop mi-web || true
+            docker rm mi-web || true
+            docker run -d -p 80:80 --name mi-web mi-web
+          EOF
