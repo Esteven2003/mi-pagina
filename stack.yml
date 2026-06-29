@@ -25,7 +25,7 @@ services:
         - "traefik.http.routers.miweb-secure.tls.certresolver=le"
 
         # SERVICE PORT (NGINX)
-        - "traefik.http.services.miweb.loadbalancer.server.port=5000"
+        - "traefik.http.services.miweb.loadbalancer.server.port=80"
 
         - "traefik.docker.network=traefik-public"
 
