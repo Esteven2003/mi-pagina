@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mi-web:
-    image: ghcr.io/esteven2003/mi-web:latest
+    image: ghcr.io/esteven2003/mi-pagina:latest
     networks:
       - traefik-public
     deploy:
